@@ -1,0 +1,1200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SPCS Custom Image Guide</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --text: #1a1a2e;
+    --code-bg: #f4f4f8;
+    --border: #e0e0e6;
+    --accent: #2962ff;
+    --header-bg: #f8f9fb;
+    --table-stripe: #f4f6fa;
+    --inline-code-bg: #eef0f5;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, sans-serif;
+    line-height: 1.7;
+    color: var(--text);
+    background: var(--bg);
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 40px 24px 80px;
+  }
+  h1 {
+    font-size: 2em;
+    margin: 0 0 8px;
+    padding-bottom: 12px;
+    border-bottom: 3px solid var(--accent);
+    color: var(--accent);
+  }
+  h2 {
+    font-size: 1.5em;
+    margin: 48px 0 16px;
+    padding: 10px 0 8px;
+    border-bottom: 2px solid var(--border);
+    color: #1a1a2e;
+  }
+  h3 {
+    font-size: 1.15em;
+    margin: 32px 0 12px;
+    color: #333;
+  }
+  p { margin: 12px 0; }
+  hr {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 36px 0;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  ul, ol {
+    margin: 12px 0 12px 28px;
+  }
+  li { margin: 4px 0; }
+  blockquote {
+    border-left: 4px solid var(--accent);
+    background: var(--header-bg);
+    padding: 12px 16px;
+    margin: 16px 0;
+    border-radius: 4px;
+  }
+  blockquote p { margin: 4px 0; }
+  code {
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+    font-size: 0.88em;
+  }
+  p code, li code, td code {
+    background: var(--inline-code-bg);
+    padding: 2px 6px;
+    border-radius: 4px;
+    color: #c7254e;
+  }
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 20px;
+    overflow-x: auto;
+    margin: 16px 0;
+    line-height: 1.5;
+  }
+  pre code {
+    background: none;
+    padding: 0;
+    color: inherit;
+    border-radius: 0;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0;
+    font-size: 0.95em;
+  }
+  th {
+    background: var(--header-bg);
+    font-weight: 600;
+    text-align: left;
+    padding: 10px 14px;
+    border: 1px solid var(--border);
+  }
+  td {
+    padding: 10px 14px;
+    border: 1px solid var(--border);
+  }
+  tr:nth-child(even) { background: var(--table-stripe); }
+  strong { font-weight: 600; }
+  .highlight { background: var(--code-bg); }
+  @media print {
+    body { max-width: 100%; padding: 20px; }
+    h2 { page-break-before: auto; }
+    pre { white-space: pre-wrap; word-break: break-all; }
+  }
+</style>
+</head>
+<body>
+<h1 id="fork-and-customize-an-spcs-base-image">Fork and Customize an SPCS Base Image</h1>
+<p>End-to-end workflow for pulling a Snowpark Container Services base image, customizing it, pushing it back to the Snowflake registry, and deploying it as a service.</p>
+<h2 id="prerequisites">Prerequisites</h2>
+<ul>
+<li>Docker installed locally</li>
+<li>Snowflake CLI (<code>snow</code>) installed, or Docker login credentials</li>
+<li>A role with <code>CREATE IMAGE REPOSITORY</code> on the target schema and <code>WRITE</code> on the repository</li>
+</ul>
+<hr />
+<h2 id="step-1-create-an-image-repository-if-you-dont-have-one">Step 1: Create an Image Repository (if you don't have one)</h2>
+<div class="highlight"><pre><span></span><code><span class="n">USE</span><span class="w"> </span><span class="k">ROLE</span><span class="w"> </span><span class="n">my_role</span><span class="p">;</span>
+<span class="n">USE</span><span class="w"> </span><span class="k">DATABASE</span><span class="w"> </span><span class="n">my_db</span><span class="p">;</span>
+<span class="n">USE</span><span class="w"> </span><span class="k">SCHEMA</span><span class="w"> </span><span class="n">my_schema</span><span class="p">;</span>
+
+<span class="k">CREATE</span><span class="w"> </span><span class="n">IMAGE</span><span class="w"> </span><span class="n">REPOSITORY</span><span class="w"> </span><span class="k">IF</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">EXISTS</span><span class="w"> </span><span class="n">my_repo</span><span class="p">;</span>
+</code></pre></div>
+
+<p>Verify and get the repository URL:</p>
+<div class="highlight"><pre><span></span><code><span class="k">SHOW</span><span class="w"> </span><span class="n">IMAGE</span><span class="w"> </span><span class="n">REPOSITORIES</span><span class="p">;</span>
+<span class="c1">-- Look at the &quot;repository_url&quot; column in the output</span>
+</code></pre></div>
+
+<p>The URL will look like:</p>
+<div class="highlight"><pre><span></span><code>&lt;orgname&gt;-&lt;acctname&gt;.registry.snowflakecomputing.com/my_db/my_schema/my_repo
+</code></pre></div>
+
+<hr />
+<h2 id="step-2-authenticate-docker-to-the-snowflake-registry">Step 2: Authenticate Docker to the Snowflake Registry</h2>
+<p><strong>Option A — Snowflake CLI (recommended):</strong></p>
+<div class="highlight"><pre><span></span><code>snow<span class="w"> </span>spcs<span class="w"> </span>image-registry<span class="w"> </span>login
+</code></pre></div>
+
+<p><strong>Option B — PAT (programmatic access token):</strong></p>
+<div class="highlight"><pre><span></span><code>docker<span class="w"> </span>login<span class="w"> </span>&lt;orgname&gt;-&lt;acctname&gt;.registry.snowflakecomputing.com<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-u<span class="w"> </span>USER<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--password-stdin<span class="w"> </span><span class="o">&lt;&lt;&lt;</span><span class="w"> </span><span class="s2">&quot;&lt;your-PAT-token&gt;&quot;</span>
+</code></pre></div>
+
+<blockquote>
+<p><strong>Note:</strong> Replace underscores in the account name with dashes in the hostname
+(e.g. <code>my_account</code> becomes <code>my-account</code>).</p>
+</blockquote>
+<hr />
+<h2 id="step-3-list-existing-images-and-pull-the-base-image">Step 3: List Existing Images and Pull the Base Image</h2>
+<p>List what's already in the repo:</p>
+<div class="highlight"><pre><span></span><code><span class="k">SHOW</span><span class="w"> </span><span class="n">IMAGES</span><span class="w"> </span><span class="k">IN</span><span class="w"> </span><span class="n">IMAGE</span><span class="w"> </span><span class="n">REPOSITORY</span><span class="w"> </span><span class="n">my_db</span><span class="p">.</span><span class="n">my_schema</span><span class="p">.</span><span class="n">my_repo</span><span class="p">;</span>
+</code></pre></div>
+
+<p>Pull the base image locally:</p>
+<div class="highlight"><pre><span></span><code>docker<span class="w"> </span>pull<span class="w"> </span>&lt;orgname&gt;-&lt;acctname&gt;.registry.snowflakecomputing.com/my_db/my_schema/my_repo/base_image:latest
+</code></pre></div>
+
+<hr />
+<h2 id="step-4-write-a-dockerfile-to-customize-the-image">Step 4: Write a Dockerfile to Customize the Image</h2>
+<p>Create a <code>Dockerfile</code> that uses the pulled Snowflake image as its base:</p>
+<div class="highlight"><pre><span></span><code><span class="k">FROM</span><span class="w"> </span><span class="s">&lt;orgname&gt;-&lt;acctname&gt;.registry.snowflakecomputing.com/my_db/my_schema/my_repo/base_image:latest</span>
+
+<span class="c"># Install additional packages</span>
+<span class="k">RUN</span><span class="w"> </span>apt-get<span class="w"> </span>update<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>apt-get<span class="w"> </span>install<span class="w"> </span>-y<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>curl<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>vim<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span><span class="o">&amp;&amp;</span><span class="w"> </span>rm<span class="w"> </span>-rf<span class="w"> </span>/var/lib/apt/lists/*
+
+<span class="c"># Install Python dependencies</span>
+<span class="k">RUN</span><span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>--no-cache-dir<span class="w"> </span>pandas<span class="w"> </span>flask
+
+<span class="c"># Copy your custom application code</span>
+<span class="k">COPY</span><span class="w"> </span>./my_app<span class="w"> </span>/opt/my_app
+
+<span class="c"># Set working directory</span>
+<span class="k">WORKDIR</span><span class="w"> </span><span class="s">/opt/my_app</span>
+
+<span class="c"># Expose a port</span>
+<span class="k">EXPOSE</span><span class="w"> </span><span class="s">8080</span>
+
+<span class="c"># Override entrypoint if needed</span>
+<span class="k">CMD</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;python&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;app.py&quot;</span><span class="p">]</span>
+</code></pre></div>
+
+<hr />
+<h2 id="step-5-build-the-forked-image">Step 5: Build the Forked Image</h2>
+<p>Build for <code>linux/amd64</code> (the platform SPCS requires):</p>
+<div class="highlight"><pre><span></span><code>docker<span class="w"> </span>build<span class="w"> </span>--rm<span class="w"> </span>--platform<span class="w"> </span>linux/amd64<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-t<span class="w"> </span>&lt;orgname&gt;-&lt;acctname&gt;.registry.snowflakecomputing.com/my_db/my_schema/my_repo/my_custom_image:v1<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>.
+</code></pre></div>
+
+<hr />
+<h2 id="step-6-push-the-forked-image-back-to-the-snowflake-registry">Step 6: Push the Forked Image Back to the Snowflake Registry</h2>
+<div class="highlight"><pre><span></span><code>docker<span class="w"> </span>push<span class="w"> </span>&lt;orgname&gt;-&lt;acctname&gt;.registry.snowflakecomputing.com/my_db/my_schema/my_repo/my_custom_image:v1
+</code></pre></div>
+
+<p>Verify it arrived:</p>
+<div class="highlight"><pre><span></span><code><span class="k">SHOW</span><span class="w"> </span><span class="n">IMAGES</span><span class="w"> </span><span class="k">IN</span><span class="w"> </span><span class="n">IMAGE</span><span class="w"> </span><span class="n">REPOSITORY</span><span class="w"> </span><span class="n">my_db</span><span class="p">.</span><span class="n">my_schema</span><span class="p">.</span><span class="n">my_repo</span><span class="p">;</span>
+</code></pre></div>
+
+<hr />
+<h2 id="step-7-deploy-as-an-spcs-service">Step 7: Deploy as an SPCS Service</h2>
+<p>First ensure you have a compute pool:</p>
+<div class="highlight"><pre><span></span><code><span class="c1">-- Check existing pools</span>
+<span class="k">SHOW</span><span class="w"> </span><span class="n">COMPUTE</span><span class="w"> </span><span class="n">POOLS</span><span class="p">;</span>
+
+<span class="c1">-- Or create one</span>
+<span class="k">CREATE</span><span class="w"> </span><span class="n">COMPUTE</span><span class="w"> </span><span class="n">POOL</span><span class="w"> </span><span class="n">my_pool</span>
+<span class="w">  </span><span class="n">MIN_NODES</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span>
+<span class="w">  </span><span class="n">MAX_NODES</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span>
+<span class="w">  </span><span class="n">INSTANCE_FAMILY</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">CPU_X64_XS</span><span class="p">;</span>
+
+<span class="c1">-- Wait until state is ACTIVE or IDLE</span>
+<span class="k">DESCRIBE</span><span class="w"> </span><span class="n">COMPUTE</span><span class="w"> </span><span class="n">POOL</span><span class="w"> </span><span class="n">my_pool</span><span class="p">;</span>
+</code></pre></div>
+
+<p>Create the service using your custom image:</p>
+<div class="highlight"><pre><span></span><code><span class="k">CREATE</span><span class="w"> </span><span class="n">SERVICE</span><span class="w"> </span><span class="n">my_custom_service</span>
+<span class="w">  </span><span class="k">IN</span><span class="w"> </span><span class="n">COMPUTE</span><span class="w"> </span><span class="n">POOL</span><span class="w"> </span><span class="n">my_pool</span>
+<span class="w">  </span><span class="k">FROM</span><span class="w"> </span><span class="n">SPECIFICATION</span><span class="w"> </span><span class="err">$$</span>
+<span class="w">  </span><span class="n">spec</span><span class="p">:</span>
+<span class="w">    </span><span class="n">containers</span><span class="p">:</span>
+<span class="w">    </span><span class="o">-</span><span class="w"> </span><span class="n">name</span><span class="p">:</span><span class="w"> </span><span class="n">main</span>
+<span class="w">      </span><span class="n">image</span><span class="p">:</span><span class="w"> </span><span class="o">/</span><span class="n">my_db</span><span class="o">/</span><span class="n">my_schema</span><span class="o">/</span><span class="n">my_repo</span><span class="o">/</span><span class="n">my_custom_image</span><span class="p">:</span><span class="n">v1</span>
+<span class="w">      </span><span class="n">env</span><span class="p">:</span>
+<span class="w">        </span><span class="n">PORT</span><span class="p">:</span><span class="w"> </span><span class="ss">&quot;8080&quot;</span>
+<span class="w">      </span><span class="n">readinessProbe</span><span class="p">:</span>
+<span class="w">        </span><span class="n">port</span><span class="p">:</span><span class="w"> </span><span class="mi">8080</span>
+<span class="w">        </span><span class="n">path</span><span class="p">:</span><span class="w"> </span><span class="o">/</span><span class="n">healthcheck</span>
+<span class="w">    </span><span class="n">endpoints</span><span class="p">:</span>
+<span class="w">    </span><span class="o">-</span><span class="w"> </span><span class="n">name</span><span class="p">:</span><span class="w"> </span><span class="n">app</span>
+<span class="w">      </span><span class="n">port</span><span class="p">:</span><span class="w"> </span><span class="mi">8080</span>
+<span class="w">      </span><span class="k">public</span><span class="p">:</span><span class="w"> </span><span class="k">true</span>
+<span class="w">  </span><span class="err">$$</span>
+<span class="w">  </span><span class="n">MIN_INSTANCES</span><span class="o">=</span><span class="mi">1</span>
+<span class="w">  </span><span class="n">MAX_INSTANCES</span><span class="o">=</span><span class="mi">1</span><span class="p">;</span>
+</code></pre></div>
+
+<p>Check that it's running:</p>
+<div class="highlight"><pre><span></span><code><span class="k">DESCRIBE</span><span class="w"> </span><span class="n">SERVICE</span><span class="w"> </span><span class="n">my_custom_service</span><span class="p">;</span>
+<span class="k">SHOW</span><span class="w"> </span><span class="n">SERVICE</span><span class="w"> </span><span class="n">CONTAINERS</span><span class="w"> </span><span class="k">IN</span><span class="w"> </span><span class="n">SERVICE</span><span class="w"> </span><span class="n">my_custom_service</span><span class="p">;</span>
+</code></pre></div>
+
+<hr />
+<h2 id="service-specification-yaml-templates">Service Specification YAML Templates</h2>
+<h3 id="minimal-spec">Minimal spec</h3>
+<p>The simplest spec with one container, one endpoint, and a readiness probe:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">containers</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">main</span>
+<span class="w">    </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/my_db/my_schema/my_repo/my_custom_image:v1</span>
+<span class="w">    </span><span class="nt">readinessProbe</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8080</span>
+<span class="w">      </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/healthcheck</span>
+<span class="w">  </span><span class="nt">endpoints</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">app</span>
+<span class="w">    </span><span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8080</span>
+<span class="w">    </span><span class="nt">public</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+</code></pre></div>
+
+<h3 id="full-featured-spec-with-environment-variables-probes-resources-and-volumes">Full-featured spec with environment variables, probes, resources, and volumes</h3>
+<div class="highlight"><pre><span></span><code><span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">containers</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">main</span>
+<span class="w">    </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/my_db/my_schema/my_repo/my_custom_image:v1</span>
+
+<span class="w">    </span><span class="c1"># ── Environment variables ──</span>
+<span class="w">    </span><span class="c1"># Static key-value pairs injected into the container at startup.</span>
+<span class="w">    </span><span class="nt">env</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">SERVER_PORT</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;8080&quot;</span>
+<span class="w">      </span><span class="nt">LOG_LEVEL</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;INFO&quot;</span>
+<span class="w">      </span><span class="nt">APP_ENV</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;production&quot;</span>
+<span class="w">      </span><span class="nt">MAX_WORKERS</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;4&quot;</span>
+<span class="w">      </span><span class="nt">SNOWFLAKE_WAREHOUSE</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my_warehouse</span>
+
+<span class="w">    </span><span class="c1"># ── Readiness probe ──</span>
+<span class="w">    </span><span class="c1"># Snowflake checks this endpoint to decide when the container is</span>
+<span class="w">    </span><span class="c1"># ready to receive traffic. The service stays in PENDING until</span>
+<span class="w">    </span><span class="c1"># the probe succeeds.</span>
+<span class="w">    </span><span class="nt">readinessProbe</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8080</span>
+<span class="w">      </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/healthcheck</span>
+<span class="w">      </span><span class="nt">initialDelaySeconds</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10</span><span class="w">   </span><span class="c1"># wait before first check</span>
+<span class="w">      </span><span class="nt">periodSeconds</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">30</span><span class="w">         </span><span class="c1"># interval between checks</span>
+<span class="w">      </span><span class="nt">timeoutSeconds</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5</span><span class="w">         </span><span class="c1"># timeout per check</span>
+<span class="w">      </span><span class="nt">failureThreshold</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">3</span><span class="w">       </span><span class="c1"># failures before marking unready</span>
+
+<span class="w">    </span><span class="c1"># ── Resource requests ──</span>
+<span class="w">    </span><span class="c1"># Guarantees a minimum amount of memory on the compute pool node.</span>
+<span class="w">    </span><span class="c1"># Prevents resource starvation when multiple services share a pool.</span>
+<span class="w">    </span><span class="nt">resources</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">requests</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">memory</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2G</span>
+<span class="w">      </span><span class="nt">limits</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">memory</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">4G</span>
+
+<span class="w">    </span><span class="c1"># ── Volume mounts ──</span>
+<span class="w">    </span><span class="nt">volumeMounts</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">stage-data</span>
+<span class="w">      </span><span class="nt">mountPath</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/opt/data</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">local-scratch</span>
+<span class="w">      </span><span class="nt">mountPath</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/tmp/scratch</span>
+
+<span class="w">  </span><span class="c1"># ── Endpoints ──</span>
+<span class="w">  </span><span class="nt">endpoints</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">app</span>
+<span class="w">    </span><span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8080</span>
+<span class="w">    </span><span class="nt">public</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w">          </span><span class="c1"># accessible from the internet via ingress URL</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">internal-api</span>
+<span class="w">    </span><span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">9090</span>
+<span class="w">    </span><span class="nt">public</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span><span class="w">         </span><span class="c1"># only reachable by other SPCS services</span>
+
+<span class="w">  </span><span class="c1"># ── Volumes ──</span>
+<span class="w">  </span><span class="nt">volumes</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">stage-data</span>
+<span class="w">    </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;@my_db.my_schema.my_stage&quot;</span><span class="w">   </span><span class="c1"># mount a Snowflake stage</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">local-scratch</span>
+<span class="w">    </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">local</span><span class="w">                          </span><span class="c1"># ephemeral node-local storage</span>
+<span class="w">    </span><span class="nt">size</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10Gi</span>
+</code></pre></div>
+
+<h3 id="spec-with-secrets-from-snowflake">Spec with secrets from Snowflake</h3>
+<p>Use Snowflake secrets to inject sensitive values (API keys, tokens) without hardcoding them:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">containers</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">main</span>
+<span class="w">    </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/my_db/my_schema/my_repo/my_custom_image:v1</span>
+<span class="w">    </span><span class="nt">env</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">SERVER_PORT</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;8080&quot;</span>
+<span class="w">    </span><span class="nt">secrets</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">snowflakeSecret</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my_db.my_schema.my_api_secret</span><span class="w">   </span><span class="c1"># a SECRET object</span>
+<span class="w">      </span><span class="nt">secretKeyRef</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">username</span><span class="w">                             </span><span class="c1"># key within the secret</span>
+<span class="w">      </span><span class="nt">envVarName</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">API_USER</span><span class="w">                               </span><span class="c1"># exposed as $API_USER</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">snowflakeSecret</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my_db.my_schema.my_api_secret</span>
+<span class="w">      </span><span class="nt">secretKeyRef</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">password</span>
+<span class="w">      </span><span class="nt">envVarName</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">API_KEY</span>
+<span class="w">    </span><span class="nt">readinessProbe</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8080</span>
+<span class="w">      </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/healthcheck</span>
+<span class="w">  </span><span class="nt">endpoints</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">app</span>
+<span class="w">    </span><span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8080</span>
+<span class="w">    </span><span class="nt">public</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+</code></pre></div>
+
+<p>Create the secret in Snowflake first:</p>
+<div class="highlight"><pre><span></span><code><span class="k">CREATE</span><span class="w"> </span><span class="n">SECRET</span><span class="w"> </span><span class="n">my_db</span><span class="p">.</span><span class="n">my_schema</span><span class="p">.</span><span class="n">my_api_secret</span>
+<span class="w">  </span><span class="k">TYPE</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">password</span>
+<span class="w">  </span><span class="n">USERNAME</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;my_api_user&#39;</span>
+<span class="w">  </span><span class="n">PASSWORD</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;my_api_key_value&#39;</span><span class="p">;</span>
+</code></pre></div>
+
+<h3 id="spec-with-specification-templates-parameterized">Spec with specification templates (parameterized)</h3>
+<p>Use <code>{{ variable }}</code> placeholders to create reusable specs across environments:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">containers</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">main</span>
+<span class="w">    </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/my_db/my_schema/my_repo/my_custom_image:{{ image_tag }}</span>
+<span class="w">    </span><span class="nt">env</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">APP_ENV</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{{</span><span class="nv"> </span><span class="s">environment</span><span class="nv"> </span><span class="s">}}&quot;</span>
+<span class="w">      </span><span class="nt">LOG_LEVEL</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{{</span><span class="nv"> </span><span class="s">log_level</span><span class="nv"> </span><span class="s">}}&quot;</span>
+<span class="w">    </span><span class="nt">readinessProbe</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8080</span>
+<span class="w">      </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/healthcheck</span>
+<span class="w">  </span><span class="nt">endpoints</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">app</span>
+<span class="w">    </span><span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8080</span>
+<span class="w">    </span><span class="nt">public</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+</code></pre></div>
+
+<p>Deploy with different values per environment:</p>
+<div class="highlight"><pre><span></span><code><span class="c1">-- Production</span>
+<span class="k">CREATE</span><span class="w"> </span><span class="n">SERVICE</span><span class="w"> </span><span class="n">my_service_prod</span>
+<span class="w">  </span><span class="k">IN</span><span class="w"> </span><span class="n">COMPUTE</span><span class="w"> </span><span class="n">POOL</span><span class="w"> </span><span class="n">prod_pool</span>
+<span class="w">  </span><span class="k">FROM</span><span class="w"> </span><span class="n">SPECIFICATION</span><span class="w"> </span><span class="err">$$</span><span class="w"> </span><span class="p">...</span><span class="w"> </span><span class="err">$$</span>
+<span class="w">  </span><span class="k">USING</span><span class="w"> </span><span class="p">(</span><span class="n">image_tag</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="s1">&#39;v2.1&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">environment</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="s1">&#39;production&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">log_level</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="s1">&#39;WARN&#39;</span><span class="p">);</span>
+
+<span class="c1">-- Development</span>
+<span class="k">CREATE</span><span class="w"> </span><span class="n">SERVICE</span><span class="w"> </span><span class="n">my_service_dev</span>
+<span class="w">  </span><span class="k">IN</span><span class="w"> </span><span class="n">COMPUTE</span><span class="w"> </span><span class="n">POOL</span><span class="w"> </span><span class="n">dev_pool</span>
+<span class="w">  </span><span class="k">FROM</span><span class="w"> </span><span class="n">SPECIFICATION</span><span class="w"> </span><span class="err">$$</span><span class="w"> </span><span class="p">...</span><span class="w"> </span><span class="err">$$</span>
+<span class="w">  </span><span class="k">USING</span><span class="w"> </span><span class="p">(</span><span class="n">image_tag</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="s1">&#39;latest&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">environment</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="s1">&#39;development&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">log_level</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="s1">&#39;DEBUG&#39;</span><span class="p">);</span>
+</code></pre></div>
+
+<h3 id="readiness-probe-reference">Readiness probe reference</h3>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>port</code></td>
+<td>Port to probe (required)</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>path</code></td>
+<td>HTTP GET path (required)</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>initialDelaySeconds</code></td>
+<td>Seconds to wait before first probe</td>
+<td>0</td>
+</tr>
+<tr>
+<td><code>periodSeconds</code></td>
+<td>Seconds between probes</td>
+<td>10</td>
+</tr>
+<tr>
+<td><code>timeoutSeconds</code></td>
+<td>Seconds before probe times out</td>
+<td>1</td>
+</tr>
+<tr>
+<td><code>failureThreshold</code></td>
+<td>Consecutive failures to mark unready</td>
+<td>3</td>
+</tr>
+</tbody>
+</table>
+<p>The probe sends an HTTP GET to <code>http://localhost:&lt;port&gt;&lt;path&gt;</code>. Any <code>2xx</code> or <code>3xx</code> response is treated as success. If the probe never passes, the service stays in <code>PENDING</code> state — check <code>SHOW SERVICE CONTAINERS</code> and service logs for diagnostics.</p>
+<hr />
+<h2 id="quick-reference">Quick Reference</h2>
+<table>
+<thead>
+<tr>
+<th>Step</th>
+<th>Where</th>
+<th>Command</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Create repo</td>
+<td>Snowflake</td>
+<td><code>CREATE IMAGE REPOSITORY</code></td>
+</tr>
+<tr>
+<td>Auth Docker</td>
+<td>Local</td>
+<td><code>snow spcs image-registry login</code></td>
+</tr>
+<tr>
+<td>Pull base image</td>
+<td>Local</td>
+<td><code>docker pull &lt;repo_url&gt;/base_image:tag</code></td>
+</tr>
+<tr>
+<td>Customize</td>
+<td>Local</td>
+<td>Write <code>Dockerfile</code> with <code>FROM</code> base image</td>
+</tr>
+<tr>
+<td>Build</td>
+<td>Local</td>
+<td><code>docker build --platform linux/amd64 -t &lt;repo_url&gt;/custom:v1 .</code></td>
+</tr>
+<tr>
+<td>Push</td>
+<td>Local</td>
+<td><code>docker push &lt;repo_url&gt;/custom:v1</code></td>
+</tr>
+<tr>
+<td>Deploy</td>
+<td>Snowflake</td>
+<td><code>CREATE SERVICE ... image: /db/schema/repo/custom:v1</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="troubleshooting">Troubleshooting</h2>
+<h3 id="no-host-in-request-url-on-docker-pushpull"><code>no Host in request URL</code> on docker push/pull</h3>
+<p>Your account name contains an underscore. Docker CLI does not accept underscores in hostnames.</p>
+<div class="highlight"><pre><span></span><code># Wrong
+docker push myorg-my_acct.registry.snowflakecomputing.com/...
+
+# Correct — replace underscore with dash
+docker push myorg-my-acct.registry.snowflakecomputing.com/...
+</code></pre></div>
+
+<p>Use <code>SHOW IMAGE REPOSITORIES</code> to get a valid repository URL.</p>
+<h3 id="authentication-required-or-unauthorized-on-pushpull"><code>authentication required</code> or <code>unauthorized</code> on push/pull</h3>
+<p>Your Docker session has expired or was never authenticated.</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># Re-authenticate</span>
+snow<span class="w"> </span>spcs<span class="w"> </span>image-registry<span class="w"> </span>login
+
+<span class="c1"># Verify login succeeded</span>
+docker<span class="w"> </span>pull<span class="w"> </span>&lt;repo_url&gt;/base_image:latest
+</code></pre></div>
+
+<p>If using a PAT, confirm the token has not expired and that you pass <code>USER</code> (literal) as the username.</p>
+<h3 id="denied-requested-access-to-the-resource-is-denied"><code>denied: requested access to the resource is denied</code></h3>
+<p>Your current Snowflake role lacks the required privilege on the repository.</p>
+<ul>
+<li><strong>Pull</strong> requires <code>READ</code> (or <code>OWNERSHIP</code>/<code>WRITE</code>) on the image repository.</li>
+<li><strong>Push</strong> requires <code>WRITE</code> (or <code>OWNERSHIP</code>) on the image repository.</li>
+</ul>
+<div class="highlight"><pre><span></span><code><span class="c1">-- Grant push/pull access</span>
+<span class="k">GRANT</span><span class="w"> </span><span class="k">WRITE</span><span class="w"> </span><span class="k">ON</span><span class="w"> </span><span class="n">IMAGE</span><span class="w"> </span><span class="n">REPOSITORY</span><span class="w"> </span><span class="n">my_db</span><span class="p">.</span><span class="n">my_schema</span><span class="p">.</span><span class="n">my_repo</span><span class="w"> </span><span class="k">TO</span><span class="w"> </span><span class="k">ROLE</span><span class="w"> </span><span class="n">my_role</span><span class="p">;</span>
+</code></pre></div>
+
+<h3 id="docker-login-fails-with-credential-store-error"><code>docker login</code> fails with credential store error</h3>
+<p>Docker may use case-sensitive credential keys. Do not mix uppercase and lowercase in the hostname between <code>docker login</code> and <code>docker push</code>/<code>pull</code>.</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># Use the exact same (lowercase) hostname for login and push</span>
+docker<span class="w"> </span>login<span class="w"> </span>myorg-myacct.registry.snowflakecomputing.com
+docker<span class="w"> </span>push<span class="w">  </span>myorg-myacct.registry.snowflakecomputing.com/my_db/my_schema/my_repo/image:v1
+</code></pre></div>
+
+<h3 id="manifest-unknown-or-not-found-on-pull"><code>manifest unknown</code> or <code>not found</code> on pull</h3>
+<p>The image name or tag does not exist in the repository.</p>
+<div class="highlight"><pre><span></span><code><span class="c1">-- List all images and tags to confirm the correct name</span>
+<span class="k">SHOW</span><span class="w"> </span><span class="n">IMAGES</span><span class="w"> </span><span class="k">IN</span><span class="w"> </span><span class="n">IMAGE</span><span class="w"> </span><span class="n">REPOSITORY</span><span class="w"> </span><span class="n">my_db</span><span class="p">.</span><span class="n">my_schema</span><span class="p">.</span><span class="n">my_repo</span><span class="p">;</span>
+</code></pre></div>
+
+<h3 id="push-hangs-or-times-out-on-large-images">Push hangs or times out on large images</h3>
+<p>The max compressed layer size is 160 GiB (AWS) / 195 GiB (Azure). If your image has very large layers:</p>
+<ul>
+<li>Use multi-stage Docker builds to reduce final image size.</li>
+<li>Avoid copying large data files into the image — mount them from a Snowflake stage at runtime instead.</li>
+<li>Check network/proxy settings if behind a corporate firewall.</li>
+</ul>
+<h3 id="invalid-consent-request-when-accessing-a-public-service-endpoint"><code>invalid consent request</code> when accessing a public service endpoint</h3>
+<p>This happens when the user's <strong>default role</strong> is a privileged role like <code>ACCOUNTADMIN</code> or <code>SECURITYADMIN</code>.</p>
+<div class="highlight"><pre><span></span><code><span class="c1">-- Change the user&#39;s default role to a non-privileged role</span>
+<span class="k">ALTER</span><span class="w"> </span><span class="k">USER</span><span class="w"> </span><span class="n">my_user</span><span class="w"> </span><span class="k">SET</span><span class="w"> </span><span class="n">DEFAULT_ROLE</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">my_role</span><span class="p">;</span>
+</code></pre></div>
+
+<h3 id="service-stuck-in-pending-after-push">Service stuck in <code>PENDING</code> after push</h3>
+<p>The image pushed successfully but the service won't start.</p>
+<div class="highlight"><pre><span></span><code><span class="c1">-- Check container-level status for error details</span>
+<span class="k">SHOW</span><span class="w"> </span><span class="n">SERVICE</span><span class="w"> </span><span class="n">CONTAINERS</span><span class="w"> </span><span class="k">IN</span><span class="w"> </span><span class="n">SERVICE</span><span class="w"> </span><span class="n">my_custom_service</span><span class="p">;</span>
+
+<span class="c1">-- Check service logs</span>
+<span class="k">SELECT</span><span class="w"> </span><span class="k">SYSTEM</span><span class="err">$</span><span class="n">GET_SERVICE_LOGS</span><span class="p">(</span><span class="s1">&#39;my_custom_service&#39;</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;main&#39;</span><span class="p">);</span>
+</code></pre></div>
+
+<p>Common causes:
+- Image was built for the wrong platform (must be <code>linux/amd64</code>).
+- The container crashes on startup — check logs for application errors.
+- Compute pool is not in <code>ACTIVE</code>/<code>IDLE</code> state — run <code>DESCRIBE COMPUTE POOL my_pool</code>.
+- Resource starvation on the compute pool node — specify memory requests in the spec or use a larger instance family.</p>
+<h3 id="snowflake_full-encryption-throttling"><code>SNOWFLAKE_FULL</code> encryption throttling</h3>
+<p>If you see intermittent push failures or slowdowns, Snowflake may throttle requests under <code>SNOWFLAKE_FULL</code> encryption when detecting unusually large parallel requests. Retry with backoff, or create the repository with <code>SNOWFLAKE_SSE</code> encryption if Tri-Secret Secure is not required:</p>
+<div class="highlight"><pre><span></span><code><span class="k">CREATE</span><span class="w"> </span><span class="n">IMAGE</span><span class="w"> </span><span class="n">REPOSITORY</span><span class="w"> </span><span class="n">my_repo</span><span class="w"> </span><span class="n">ENCRYPTION</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="k">TYPE</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;SNOWFLAKE_SSE&#39;</span><span class="p">);</span>
+</code></pre></div>
+
+<hr />
+<h2 id="cicd-pipeline-automation">CI/CD Pipeline Automation</h2>
+<h3 id="required-secrets-variables">Required secrets / variables</h3>
+<p>Store these in your CI/CD platform's secret management (GitHub Secrets, GitLab CI Variables, etc.):</p>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Description</th>
+<th>Example</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>SNOWFLAKE_ACCOUNT</code></td>
+<td>Org and account (dashes, no underscores)</td>
+<td><code>myorg-myacct</code></td>
+</tr>
+<tr>
+<td><code>SNOWFLAKE_USER</code></td>
+<td>Service account username</td>
+<td><code>CI_DEPLOYER</code></td>
+</tr>
+<tr>
+<td><code>SNOWFLAKE_PAT</code></td>
+<td>Programmatic access token</td>
+<td><em>(generated via Snowsight)</em></td>
+</tr>
+<tr>
+<td><code>SNOWFLAKE_ROLE</code></td>
+<td>Role with WRITE on the image repo</td>
+<td><code>CI_DEPLOY_ROLE</code></td>
+</tr>
+<tr>
+<td><code>SNOWFLAKE_WAREHOUSE</code></td>
+<td>Warehouse for SQL commands</td>
+<td><code>CI_WH</code></td>
+</tr>
+<tr>
+<td><code>IMAGE_REPO_URL</code></td>
+<td>Full repository URL</td>
+<td><code>myorg-myacct.registry.snowflakecomputing.com/my_db/my_schema/my_repo</code></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h3 id="github-actions">GitHub Actions</h3>
+<div class="highlight"><pre><span></span><code><span class="c1"># .github/workflows/spcs-deploy.yml</span>
+<span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Build and Deploy SPCS Image</span>
+
+<span class="nt">on</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">push</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">branches</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">main</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">paths</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&#39;docker/**&#39;</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&#39;.github/workflows/spcs-deploy.yml&#39;</span>
+
+<span class="nt">env</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">REGISTRY</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${{ secrets.SNOWFLAKE_ACCOUNT }}.registry.snowflakecomputing.com</span>
+<span class="w">  </span><span class="nt">IMAGE_REPO</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${{ secrets.IMAGE_REPO_URL }}</span>
+<span class="w">  </span><span class="nt">IMAGE_NAME</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my_custom_image</span>
+
+<span class="nt">jobs</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">build-push-deploy</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">runs-on</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ubuntu-latest</span>
+<span class="w">    </span><span class="nt">steps</span><span class="p">:</span>
+
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Checkout code</span>
+<span class="w">      </span><span class="nt">uses</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">actions/checkout@v4</span>
+
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Set image tag</span>
+<span class="w">      </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tag</span>
+<span class="w">      </span><span class="nt">run</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">|</span>
+<span class="w">        </span><span class="no">SHORT_SHA=$(echo &quot;${{ github.sha }}&quot; | cut -c1-7)</span>
+<span class="w">        </span><span class="no">echo &quot;TAG=${SHORT_SHA}&quot; &gt;&gt; &quot;$GITHUB_OUTPUT&quot;</span>
+<span class="w">        </span><span class="no">echo &quot;TAG_LATEST=latest&quot; &gt;&gt; &quot;$GITHUB_OUTPUT&quot;</span>
+
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Login to Snowflake image registry</span>
+<span class="w">      </span><span class="nt">run</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">|</span>
+<span class="w">        </span><span class="no">echo &quot;${{ secrets.SNOWFLAKE_PAT }}&quot; | \</span>
+<span class="w">          </span><span class="no">docker login &quot;$REGISTRY&quot; -u USER --password-stdin</span>
+
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Build image (linux/amd64)</span>
+<span class="w">      </span><span class="nt">run</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">|</span>
+<span class="w">        </span><span class="no">docker build --rm --platform linux/amd64 \</span>
+<span class="w">          </span><span class="no">-t &quot;$IMAGE_REPO/$IMAGE_NAME:${{ steps.tag.outputs.TAG }}&quot; \</span>
+<span class="w">          </span><span class="no">-t &quot;$IMAGE_REPO/$IMAGE_NAME:${{ steps.tag.outputs.TAG_LATEST }}&quot; \</span>
+<span class="w">          </span><span class="no">-f docker/Dockerfile \</span>
+<span class="w">          </span><span class="no">docker/</span>
+
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Push image to Snowflake registry</span>
+<span class="w">      </span><span class="nt">run</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">|</span>
+<span class="w">        </span><span class="no">docker push &quot;$IMAGE_REPO/$IMAGE_NAME:${{ steps.tag.outputs.TAG }}&quot;</span>
+<span class="w">        </span><span class="no">docker push &quot;$IMAGE_REPO/$IMAGE_NAME:${{ steps.tag.outputs.TAG_LATEST }}&quot;</span>
+
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Install Snowflake CLI</span>
+<span class="w">      </span><span class="nt">uses</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Snowflake-Labs/snowflake-cli-action@v1</span>
+<span class="w">      </span><span class="nt">with</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">cli-version</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">latest</span>
+<span class="w">        </span><span class="nt">default-config-file-path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">.snowflake/config.toml</span>
+
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Deploy / update service</span>
+<span class="w">      </span><span class="nt">env</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">SNOWFLAKE_CONNECTIONS_DEFAULT_ACCOUNT</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${{ secrets.SNOWFLAKE_ACCOUNT }}</span>
+<span class="w">        </span><span class="nt">SNOWFLAKE_CONNECTIONS_DEFAULT_USER</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${{ secrets.SNOWFLAKE_USER }}</span>
+<span class="w">        </span><span class="nt">SNOWFLAKE_CONNECTIONS_DEFAULT_AUTHENTICATOR</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">PROGRAMMATIC_ACCESS_TOKEN</span>
+<span class="w">        </span><span class="nt">SNOWFLAKE_CONNECTIONS_DEFAULT_TOKEN</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${{ secrets.SNOWFLAKE_PAT }}</span>
+<span class="w">        </span><span class="nt">SNOWFLAKE_CONNECTIONS_DEFAULT_ROLE</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${{ secrets.SNOWFLAKE_ROLE }}</span>
+<span class="w">        </span><span class="nt">SNOWFLAKE_CONNECTIONS_DEFAULT_WAREHOUSE</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${{ secrets.SNOWFLAKE_WAREHOUSE }}</span>
+<span class="w">      </span><span class="nt">run</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">|</span>
+<span class="w">        </span><span class="no">snow sql -q &quot;</span>
+<span class="w">          </span><span class="no">ALTER SERVICE IF EXISTS my_db.my_schema.my_custom_service</span>
+<span class="w">            </span><span class="no">FROM SPECIFICATION \$\$</span>
+<span class="w">            </span><span class="no">spec:</span>
+<span class="w">              </span><span class="no">containers:</span>
+<span class="w">              </span><span class="no">- name: main</span>
+<span class="w">                </span><span class="no">image: /my_db/my_schema/my_repo/$IMAGE_NAME:${{ steps.tag.outputs.TAG }}</span>
+<span class="w">                </span><span class="no">readinessProbe:</span>
+<span class="w">                  </span><span class="no">port: 8080</span>
+<span class="w">                  </span><span class="no">path: /healthcheck</span>
+<span class="w">              </span><span class="no">endpoints:</span>
+<span class="w">              </span><span class="no">- name: app</span>
+<span class="w">                </span><span class="no">port: 8080</span>
+<span class="w">                </span><span class="no">public: true</span>
+<span class="w">            </span><span class="no">\$\$;</span>
+<span class="w">        </span><span class="no">&quot;</span>
+</code></pre></div>
+
+<hr />
+<h3 id="gitlab-ci">GitLab CI</h3>
+<div class="highlight"><pre><span></span><code><span class="c1"># .gitlab-ci.yml</span>
+<span class="nt">stages</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">build</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deploy</span>
+
+<span class="nt">variables</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">REGISTRY</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${SNOWFLAKE_ACCOUNT}.registry.snowflakecomputing.com</span>
+<span class="w">  </span><span class="nt">IMAGE_REPO</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${IMAGE_REPO_URL}</span>
+<span class="w">  </span><span class="nt">IMAGE_NAME</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my_custom_image</span>
+
+<span class="nt">build-and-push</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">stage</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">build</span>
+<span class="w">  </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">docker:24-dind</span>
+<span class="w">  </span><span class="nt">services</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">docker:24-dind</span>
+<span class="w">  </span><span class="nt">variables</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">DOCKER_TLS_CERTDIR</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;&quot;</span>
+<span class="w">  </span><span class="nt">before_script</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">echo &quot;${SNOWFLAKE_PAT}&quot; | docker login &quot;${REGISTRY}&quot; -u USER --password-stdin</span>
+<span class="w">  </span><span class="nt">script</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">TAG=&quot;${CI_COMMIT_SHORT_SHA}&quot;</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">&gt;</span>
+<span class="w">      </span><span class="no">docker build --rm --platform linux/amd64</span>
+<span class="w">      </span><span class="no">-t &quot;${IMAGE_REPO}/${IMAGE_NAME}:${TAG}&quot;</span>
+<span class="w">      </span><span class="no">-t &quot;${IMAGE_REPO}/${IMAGE_NAME}:latest&quot;</span>
+<span class="w">      </span><span class="no">-f docker/Dockerfile docker/</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">docker push &quot;${IMAGE_REPO}/${IMAGE_NAME}:${TAG}&quot;</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">docker push &quot;${IMAGE_REPO}/${IMAGE_NAME}:latest&quot;</span>
+<span class="w">  </span><span class="nt">rules</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">if</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">$CI_COMMIT_BRANCH == &quot;main&quot;</span>
+<span class="w">      </span><span class="nt">changes</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">docker/**/*</span>
+
+<span class="nt">deploy-service</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">stage</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deploy</span>
+<span class="w">  </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">python:3.11-slim</span>
+<span class="w">  </span><span class="nt">before_script</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">pip install snowflake-cli-labs</span>
+<span class="w">  </span><span class="nt">script</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">TAG=&quot;${CI_COMMIT_SHORT_SHA}&quot;</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">&gt;</span>
+<span class="w">      </span><span class="no">snow sql -q &quot;</span>
+<span class="w">        </span><span class="no">ALTER SERVICE IF EXISTS my_db.my_schema.my_custom_service</span>
+<span class="w">          </span><span class="no">FROM SPECIFICATION \$\$</span>
+<span class="w">          </span><span class="no">spec:</span>
+<span class="w">            </span><span class="no">containers:</span>
+<span class="w">            </span><span class="no">- name: main</span>
+<span class="w">              </span><span class="no">image: /my_db/my_schema/my_repo/${IMAGE_NAME}:${TAG}</span>
+<span class="w">              </span><span class="no">readinessProbe:</span>
+<span class="w">                </span><span class="no">port: 8080</span>
+<span class="w">                </span><span class="no">path: /healthcheck</span>
+<span class="w">            </span><span class="no">endpoints:</span>
+<span class="w">            </span><span class="no">- name: app</span>
+<span class="w">              </span><span class="no">port: 8080</span>
+<span class="w">              </span><span class="no">public: true</span>
+<span class="w">          </span><span class="no">\$\$;</span>
+<span class="w">      </span><span class="no">&quot;</span>
+<span class="w">  </span><span class="nt">environment</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">production</span>
+<span class="w">  </span><span class="nt">rules</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">if</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">$CI_COMMIT_BRANCH == &quot;main&quot;</span>
+<span class="w">  </span><span class="nt">needs</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">build-and-push</span><span class="p p-Indicator">]</span>
+</code></pre></div>
+
+<hr />
+<h3 id="generic-shell-script-any-ci-system">Generic shell script (any CI system)</h3>
+<p>A standalone script you can call from Jenkins, Azure DevOps, CircleCI, or locally:</p>
+<div class="highlight"><pre><span></span><code><span class="ch">#!/usr/bin/env bash</span>
+<span class="c1"># deploy-spcs.sh — Build, push, and deploy an SPCS image</span>
+<span class="nb">set</span><span class="w"> </span>-euo<span class="w"> </span>pipefail
+
+<span class="c1"># ── Configuration (override via env vars or CI secrets) ──</span>
+<span class="nv">REGISTRY</span><span class="o">=</span><span class="s2">&quot;</span><span class="si">${</span><span class="nv">SNOWFLAKE_ACCOUNT</span><span class="si">}</span><span class="s2">.registry.snowflakecomputing.com&quot;</span>
+<span class="nv">IMAGE_REPO</span><span class="o">=</span><span class="s2">&quot;</span><span class="si">${</span><span class="nv">IMAGE_REPO_URL</span><span class="si">}</span><span class="s2">&quot;</span>
+<span class="nv">IMAGE_NAME</span><span class="o">=</span><span class="s2">&quot;</span><span class="si">${</span><span class="nv">IMAGE_NAME</span><span class="k">:-</span><span class="nv">my_custom_image</span><span class="si">}</span><span class="s2">&quot;</span>
+<span class="nv">TAG</span><span class="o">=</span><span class="s2">&quot;</span><span class="si">${</span><span class="nv">IMAGE_TAG</span><span class="k">:-$(</span>git<span class="w"> </span>rev-parse<span class="w"> </span>--short<span class="w"> </span>HEAD<span class="k">)</span><span class="si">}</span><span class="s2">&quot;</span>
+<span class="nv">DOCKERFILE</span><span class="o">=</span><span class="s2">&quot;</span><span class="si">${</span><span class="nv">DOCKERFILE_PATH</span><span class="k">:-</span><span class="nv">docker</span><span class="p">/Dockerfile</span><span class="si">}</span><span class="s2">&quot;</span>
+<span class="nv">BUILD_CONTEXT</span><span class="o">=</span><span class="s2">&quot;</span><span class="si">${</span><span class="nv">BUILD_CONTEXT</span><span class="k">:-</span><span class="nv">docker</span><span class="p">/</span><span class="si">}</span><span class="s2">&quot;</span>
+
+<span class="nv">FULL_IMAGE</span><span class="o">=</span><span class="s2">&quot;</span><span class="si">${</span><span class="nv">IMAGE_REPO</span><span class="si">}</span><span class="s2">/</span><span class="si">${</span><span class="nv">IMAGE_NAME</span><span class="si">}</span><span class="s2">&quot;</span>
+
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;==&gt; Authenticating to Snowflake registry...&quot;</span>
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;</span><span class="si">${</span><span class="nv">SNOWFLAKE_PAT</span><span class="si">}</span><span class="s2">&quot;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>docker<span class="w"> </span>login<span class="w"> </span><span class="s2">&quot;</span><span class="si">${</span><span class="nv">REGISTRY</span><span class="si">}</span><span class="s2">&quot;</span><span class="w"> </span>-u<span class="w"> </span>USER<span class="w"> </span>--password-stdin
+
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;==&gt; Building image </span><span class="si">${</span><span class="nv">FULL_IMAGE</span><span class="si">}</span><span class="s2">:</span><span class="si">${</span><span class="nv">TAG</span><span class="si">}</span><span class="s2"> (linux/amd64)...&quot;</span>
+docker<span class="w"> </span>build<span class="w"> </span>--rm<span class="w"> </span>--platform<span class="w"> </span>linux/amd64<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-t<span class="w"> </span><span class="s2">&quot;</span><span class="si">${</span><span class="nv">FULL_IMAGE</span><span class="si">}</span><span class="s2">:</span><span class="si">${</span><span class="nv">TAG</span><span class="si">}</span><span class="s2">&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-t<span class="w"> </span><span class="s2">&quot;</span><span class="si">${</span><span class="nv">FULL_IMAGE</span><span class="si">}</span><span class="s2">:latest&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-f<span class="w"> </span><span class="s2">&quot;</span><span class="si">${</span><span class="nv">DOCKERFILE</span><span class="si">}</span><span class="s2">&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span><span class="s2">&quot;</span><span class="si">${</span><span class="nv">BUILD_CONTEXT</span><span class="si">}</span><span class="s2">&quot;</span>
+
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;==&gt; Pushing image to Snowflake registry...&quot;</span>
+docker<span class="w"> </span>push<span class="w"> </span><span class="s2">&quot;</span><span class="si">${</span><span class="nv">FULL_IMAGE</span><span class="si">}</span><span class="s2">:</span><span class="si">${</span><span class="nv">TAG</span><span class="si">}</span><span class="s2">&quot;</span>
+docker<span class="w"> </span>push<span class="w"> </span><span class="s2">&quot;</span><span class="si">${</span><span class="nv">FULL_IMAGE</span><span class="si">}</span><span class="s2">:latest&quot;</span>
+
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;==&gt; Verifying image in repository...&quot;</span>
+snow<span class="w"> </span>sql<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;SHOW IMAGES IN IMAGE REPOSITORY my_db.my_schema.my_repo;&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span><span class="s2">&quot;</span><span class="si">${</span><span class="nv">IMAGE_NAME</span><span class="si">}</span><span class="s2">&quot;</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;WARNING: image not found in listing&quot;</span>
+
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;==&gt; Updating service...&quot;</span>
+snow<span class="w"> </span>sql<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;</span>
+<span class="s2">  ALTER SERVICE IF EXISTS my_db.my_schema.my_custom_service</span>
+<span class="s2">    FROM SPECIFICATION \$\$</span>
+<span class="s2">    spec:</span>
+<span class="s2">      containers:</span>
+<span class="s2">      - name: main</span>
+<span class="s2">        image: /my_db/my_schema/my_repo/</span><span class="si">${</span><span class="nv">IMAGE_NAME</span><span class="si">}</span><span class="s2">:</span><span class="si">${</span><span class="nv">TAG</span><span class="si">}</span>
+<span class="s2">        readinessProbe:</span>
+<span class="s2">          port: 8080</span>
+<span class="s2">          path: /healthcheck</span>
+<span class="s2">      endpoints:</span>
+<span class="s2">      - name: app</span>
+<span class="s2">        port: 8080</span>
+<span class="s2">        public: true</span>
+<span class="s2">    \$\$;</span>
+<span class="s2">&quot;</span>
+
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;==&gt; Checking service status...&quot;</span>
+snow<span class="w"> </span>sql<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;DESCRIBE SERVICE my_db.my_schema.my_custom_service;&quot;</span>
+
+<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;==&gt; Done. Deployed </span><span class="si">${</span><span class="nv">FULL_IMAGE</span><span class="si">}</span><span class="s2">:</span><span class="si">${</span><span class="nv">TAG</span><span class="si">}</span><span class="s2">&quot;</span>
+</code></pre></div>
+
+<p>Make it executable: <code>chmod +x deploy-spcs.sh</code></p>
+<hr />
+<h3 id="cicd-best-practices">CI/CD best practices</h3>
+<ul>
+<li><strong>Tag images with the commit SHA</strong> (e.g. <code>my_image:a1b2c3d</code>) for traceability. Also push a <code>latest</code> tag for convenience.</li>
+<li><strong>Use a dedicated service account</strong> with a PAT and a role scoped to only <code>WRITE</code> on the image repo and <code>OPERATE</code> on the service. Never use <code>ACCOUNTADMIN</code> in CI.</li>
+<li><strong>Pin the base image tag</strong> in your Dockerfile (<code>FROM ...base_image:v2.1</code>, not <code>:latest</code>) so builds are reproducible.</li>
+<li><strong>Cache Docker layers</strong> — use <code>--cache-from</code> or CI-native caching to speed up builds.</li>
+<li><strong>Gate production deploys</strong> behind a manual approval step or a separate pipeline triggered by tags/releases.</li>
+<li><strong>Validate before deploy</strong> — run <code>docker run --rm &lt;image&gt; &lt;healthcheck-command&gt;</code> in CI to catch startup errors before pushing.</li>
+<li><strong>Use <code>ALTER SERVICE</code></strong> (not <code>DROP</code> + <code>CREATE</code>) to update a running service with a new image. This preserves the service name, endpoints, and grants.</li>
+</ul>
+<hr />
+<h2 id="rollback-to-a-previous-image-version">Rollback to a Previous Image Version</h2>
+<h3 id="1-identify-available-image-versions">1. Identify available image versions</h3>
+<p>List all images and tags in your repository:</p>
+<div class="highlight"><pre><span></span><code><span class="k">SHOW</span><span class="w"> </span><span class="n">IMAGES</span><span class="w"> </span><span class="k">IN</span><span class="w"> </span><span class="n">IMAGE</span><span class="w"> </span><span class="n">REPOSITORY</span><span class="w"> </span><span class="n">my_db</span><span class="p">.</span><span class="n">my_schema</span><span class="p">.</span><span class="n">my_repo</span><span class="p">;</span>
+</code></pre></div>
+
+<p>This returns image names, tags, and digests. Note the tag you want to roll back to (e.g. <code>v1.0</code>, <code>a1b2c3d</code>).</p>
+<h3 id="2-check-the-currently-deployed-image">2. Check the currently deployed image</h3>
+<div class="highlight"><pre><span></span><code><span class="c1">-- View the current service specification (includes the image tag)</span>
+<span class="k">DESCRIBE</span><span class="w"> </span><span class="n">SERVICE</span><span class="w"> </span><span class="n">my_db</span><span class="p">.</span><span class="n">my_schema</span><span class="p">.</span><span class="n">my_custom_service</span><span class="p">;</span>
+
+<span class="c1">-- View container-level detail</span>
+<span class="k">SHOW</span><span class="w"> </span><span class="n">SERVICE</span><span class="w"> </span><span class="n">CONTAINERS</span><span class="w"> </span><span class="k">IN</span><span class="w"> </span><span class="n">SERVICE</span><span class="w"> </span><span class="n">my_db</span><span class="p">.</span><span class="n">my_schema</span><span class="p">.</span><span class="n">my_custom_service</span><span class="p">;</span>
+</code></pre></div>
+
+<h3 id="3-roll-back-with-alter-service">3. Roll back with ALTER SERVICE</h3>
+<p>Use <code>ALTER SERVICE</code> to swap the image tag back to a known-good version. This preserves the service name, grants, and endpoints:</p>
+<div class="highlight"><pre><span></span><code><span class="k">ALTER</span><span class="w"> </span><span class="n">SERVICE</span><span class="w"> </span><span class="n">my_db</span><span class="p">.</span><span class="n">my_schema</span><span class="p">.</span><span class="n">my_custom_service</span>
+<span class="w">  </span><span class="k">FROM</span><span class="w"> </span><span class="n">SPECIFICATION</span><span class="w"> </span><span class="err">$$</span>
+<span class="w">  </span><span class="n">spec</span><span class="p">:</span>
+<span class="w">    </span><span class="n">containers</span><span class="p">:</span>
+<span class="w">    </span><span class="o">-</span><span class="w"> </span><span class="n">name</span><span class="p">:</span><span class="w"> </span><span class="n">main</span>
+<span class="w">      </span><span class="n">image</span><span class="p">:</span><span class="w"> </span><span class="o">/</span><span class="n">my_db</span><span class="o">/</span><span class="n">my_schema</span><span class="o">/</span><span class="n">my_repo</span><span class="o">/</span><span class="n">my_custom_image</span><span class="p">:</span><span class="n">v1</span><span class="p">.</span><span class="mi">0</span>
+<span class="w">      </span><span class="n">readinessProbe</span><span class="p">:</span>
+<span class="w">        </span><span class="n">port</span><span class="p">:</span><span class="w"> </span><span class="mi">8080</span>
+<span class="w">        </span><span class="n">path</span><span class="p">:</span><span class="w"> </span><span class="o">/</span><span class="n">healthcheck</span>
+<span class="w">    </span><span class="n">endpoints</span><span class="p">:</span>
+<span class="w">    </span><span class="o">-</span><span class="w"> </span><span class="n">name</span><span class="p">:</span><span class="w"> </span><span class="n">app</span>
+<span class="w">      </span><span class="n">port</span><span class="p">:</span><span class="w"> </span><span class="mi">8080</span>
+<span class="w">      </span><span class="k">public</span><span class="p">:</span><span class="w"> </span><span class="k">true</span>
+<span class="w">  </span><span class="err">$$</span><span class="p">;</span>
+</code></pre></div>
+
+<h3 id="4-verify-the-rollback">4. Verify the rollback</h3>
+<div class="highlight"><pre><span></span><code><span class="c1">-- Confirm the service is running with the old image</span>
+<span class="k">DESCRIBE</span><span class="w"> </span><span class="n">SERVICE</span><span class="w"> </span><span class="n">my_db</span><span class="p">.</span><span class="n">my_schema</span><span class="p">.</span><span class="n">my_custom_service</span><span class="p">;</span>
+
+<span class="c1">-- Check container status is READY</span>
+<span class="k">SHOW</span><span class="w"> </span><span class="n">SERVICE</span><span class="w"> </span><span class="n">CONTAINERS</span><span class="w"> </span><span class="k">IN</span><span class="w"> </span><span class="n">SERVICE</span><span class="w"> </span><span class="n">my_db</span><span class="p">.</span><span class="n">my_schema</span><span class="p">.</span><span class="n">my_custom_service</span><span class="p">;</span>
+
+<span class="c1">-- Check logs for startup errors</span>
+<span class="k">SELECT</span><span class="w"> </span><span class="k">SYSTEM</span><span class="err">$</span><span class="n">GET_SERVICE_LOGS</span><span class="p">(</span><span class="s1">&#39;my_db.my_schema.my_custom_service&#39;</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;main&#39;</span><span class="p">);</span>
+</code></pre></div>
+
+<h3 id="5-rollback-via-cicd">5. Rollback via CI/CD</h3>
+<p>If you use the CI/CD pipelines from the previous section, you can roll back by re-running a previous pipeline or by passing the old tag explicitly.</p>
+<p><strong>GitHub Actions — manual dispatch with a rollback tag:</strong></p>
+<div class="highlight"><pre><span></span><code><span class="nt">on</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">workflow_dispatch</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">inputs</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">rollback_tag</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;Image</span><span class="nv"> </span><span class="s">tag</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">roll</span><span class="nv"> </span><span class="s">back</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">(e.g.</span><span class="nv"> </span><span class="s">a1b2c3d)&#39;</span>
+<span class="w">        </span><span class="nt">required</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+</code></pre></div>
+
+<p>Then reference <code>${{ github.event.inputs.rollback_tag }}</code> in the deploy step instead of the commit SHA.</p>
+<p><strong>Shell script:</strong></p>
+<div class="highlight"><pre><span></span><code><span class="c1"># Roll back to a specific tag</span>
+<span class="nv">IMAGE_TAG</span><span class="o">=</span>v1.0<span class="w"> </span>./deploy-spcs.sh
+</code></pre></div>
+
+<h3 id="6-rollback-via-image-digest-immutable">6. Rollback via image digest (immutable)</h3>
+<p>Tags can be overwritten (e.g. someone pushes a new image as <code>:v1.0</code>). For a guaranteed rollback, use the image digest from <code>SHOW IMAGES</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="k">ALTER</span><span class="w"> </span><span class="n">SERVICE</span><span class="w"> </span><span class="n">my_db</span><span class="p">.</span><span class="n">my_schema</span><span class="p">.</span><span class="n">my_custom_service</span>
+<span class="w">  </span><span class="k">FROM</span><span class="w"> </span><span class="n">SPECIFICATION</span><span class="w"> </span><span class="err">$$</span>
+<span class="w">  </span><span class="n">spec</span><span class="p">:</span>
+<span class="w">    </span><span class="n">containers</span><span class="p">:</span>
+<span class="w">    </span><span class="o">-</span><span class="w"> </span><span class="n">name</span><span class="p">:</span><span class="w"> </span><span class="n">main</span>
+<span class="w">      </span><span class="n">image</span><span class="p">:</span><span class="w"> </span><span class="o">/</span><span class="n">my_db</span><span class="o">/</span><span class="n">my_schema</span><span class="o">/</span><span class="n">my_repo</span><span class="o">/</span><span class="n">my_custom_image</span><span class="o">@</span><span class="n">sha256</span><span class="p">:</span><span class="n">abc123def456</span><span class="p">...</span>
+<span class="w">      </span><span class="n">readinessProbe</span><span class="p">:</span>
+<span class="w">        </span><span class="n">port</span><span class="p">:</span><span class="w"> </span><span class="mi">8080</span>
+<span class="w">        </span><span class="n">path</span><span class="p">:</span><span class="w"> </span><span class="o">/</span><span class="n">healthcheck</span>
+<span class="w">    </span><span class="n">endpoints</span><span class="p">:</span>
+<span class="w">    </span><span class="o">-</span><span class="w"> </span><span class="n">name</span><span class="p">:</span><span class="w"> </span><span class="n">app</span>
+<span class="w">      </span><span class="n">port</span><span class="p">:</span><span class="w"> </span><span class="mi">8080</span>
+<span class="w">      </span><span class="k">public</span><span class="p">:</span><span class="w"> </span><span class="k">true</span>
+<span class="w">  </span><span class="err">$$</span><span class="p">;</span>
+</code></pre></div>
+
+<h3 id="rollback-checklist">Rollback checklist</h3>
+<table>
+<thead>
+<tr>
+<th>Step</th>
+<th>Command</th>
+<th>What to check</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Find old tag</td>
+<td><code>SHOW IMAGES IN IMAGE REPOSITORY ...</code></td>
+<td>Confirm the tag/digest exists</td>
+</tr>
+<tr>
+<td>Check current</td>
+<td><code>DESCRIBE SERVICE ...</code></td>
+<td>Note the current image for forward reference</td>
+</tr>
+<tr>
+<td>Swap image</td>
+<td><code>ALTER SERVICE ... FROM SPECIFICATION ...</code></td>
+<td>Use the old tag or digest</td>
+</tr>
+<tr>
+<td>Verify status</td>
+<td><code>SHOW SERVICE CONTAINERS IN SERVICE ...</code></td>
+<td>Status should be <code>READY</code></td>
+</tr>
+<tr>
+<td>Check logs</td>
+<td><code>SYSTEM$GET_SERVICE_LOGS(...)</code></td>
+<td>No startup errors</td>
+</tr>
+<tr>
+<td>Smoke test</td>
+<td>Hit the public endpoint or service function</td>
+<td>Application responds correctly</td>
+</tr>
+</tbody>
+</table>
+<h3 id="tips">Tips</h3>
+<ul>
+<li><strong>Always tag images with the commit SHA</strong> so you have a clear history to roll back to. Relying only on <code>:latest</code> makes rollback impossible.</li>
+<li><strong>Never delete your image repository</strong> to clean up old images — this removes all versions including your rollback targets. Individual image deletion is not currently supported.</li>
+<li><strong>Keep at least 3-5 previous tags</strong> in the repository as rollback candidates.</li>
+<li><strong>Document the known-good tag</strong> in a deployment log or as a Snowflake tag on the service object:</li>
+</ul>
+<div class="highlight"><pre><span></span><code><span class="k">ALTER</span><span class="w"> </span><span class="n">SERVICE</span><span class="w"> </span><span class="n">my_db</span><span class="p">.</span><span class="n">my_schema</span><span class="p">.</span><span class="n">my_custom_service</span>
+<span class="w">  </span><span class="k">SET</span><span class="w"> </span><span class="n">TAG</span><span class="w"> </span><span class="n">last_known_good_image</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;v1.0&#39;</span><span class="p">;</span>
+</code></pre></div>
+
+<hr />
+<h2 id="secrets-management">Secrets Management</h2>
+<p>Snowflake provides two ways to inject secrets into SPCS containers: as <strong>environment variables</strong> or as <strong>files mounted to a directory</strong>. Both use Snowflake <code>SECRET</code> objects, so credentials never appear in your service specification or image.</p>
+<h3 id="supported-secret-types">Supported secret types</h3>
+<table>
+<thead>
+<tr>
+<th>Secret type</th>
+<th>SQL keyword</th>
+<th>Typical use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Username + password</td>
+<td><code>TYPE = password</code></td>
+<td>Database credentials, basic auth APIs</td>
+</tr>
+<tr>
+<td>Generic string</td>
+<td><code>TYPE = generic_string</code></td>
+<td>API keys, tokens, license keys</td>
+</tr>
+<tr>
+<td>OAuth2</td>
+<td><code>TYPE = oauth2</code></td>
+<td>OAuth client credentials</td>
+</tr>
+</tbody>
+</table>
+<h3 id="step-1-create-snowflake-secret-objects">Step 1: Create Snowflake SECRET objects</h3>
+<div class="highlight"><pre><span></span><code><span class="c1">-- Username/password secret (e.g. for an external database)</span>
+<span class="k">CREATE</span><span class="w"> </span><span class="n">SECRET</span><span class="w"> </span><span class="n">my_db</span><span class="p">.</span><span class="n">my_schema</span><span class="p">.</span><span class="n">external_db_creds</span>
+<span class="w">  </span><span class="k">TYPE</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">password</span>
+<span class="w">  </span><span class="n">USERNAME</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;db_admin&#39;</span>
+<span class="w">  </span><span class="n">PASSWORD</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;S3cureP@ss!&#39;</span><span class="p">;</span>
+
+<span class="c1">-- Generic string secret (e.g. for an API key)</span>
+<span class="k">CREATE</span><span class="w"> </span><span class="n">SECRET</span><span class="w"> </span><span class="n">my_db</span><span class="p">.</span><span class="n">my_schema</span><span class="p">.</span><span class="n">api_key</span>
+<span class="w">  </span><span class="k">TYPE</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">generic_string</span>
+<span class="w">  </span><span class="n">SECRET_STRING</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;sk-abc123def456ghi789&#39;</span><span class="p">;</span>
+
+<span class="c1">-- OAuth2 secret</span>
+<span class="k">CREATE</span><span class="w"> </span><span class="n">SECRET</span><span class="w"> </span><span class="n">my_db</span><span class="p">.</span><span class="n">my_schema</span><span class="p">.</span><span class="n">oauth_creds</span>
+<span class="w">  </span><span class="k">TYPE</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">oauth2</span>
+<span class="w">  </span><span class="n">OAUTH_REFRESH_TOKEN</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;your-refresh-token&#39;</span>
+<span class="w">  </span><span class="n">OAUTH_REFRESH_TOKEN_EXPIRY_TIME</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;2027-01-01 00:00:00&#39;</span>
+<span class="w">  </span><span class="n">API_AUTHENTICATION</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">my_security_integration</span><span class="p">;</span>
+</code></pre></div>
+
+<p>Grant the service owner role access to the secrets:</p>
+<div class="highlight"><pre><span></span><code><span class="k">GRANT</span><span class="w"> </span><span class="k">READ</span><span class="w"> </span><span class="k">ON</span><span class="w"> </span><span class="n">SECRET</span><span class="w"> </span><span class="n">my_db</span><span class="p">.</span><span class="n">my_schema</span><span class="p">.</span><span class="n">external_db_creds</span><span class="w"> </span><span class="k">TO</span><span class="w"> </span><span class="k">ROLE</span><span class="w"> </span><span class="n">my_service_role</span><span class="p">;</span>
+<span class="k">GRANT</span><span class="w"> </span><span class="k">READ</span><span class="w"> </span><span class="k">ON</span><span class="w"> </span><span class="n">SECRET</span><span class="w"> </span><span class="n">my_db</span><span class="p">.</span><span class="n">my_schema</span><span class="p">.</span><span class="n">api_key</span><span class="w"> </span><span class="k">TO</span><span class="w"> </span><span class="k">ROLE</span><span class="w"> </span><span class="n">my_service_role</span><span class="p">;</span>
+<span class="k">GRANT</span><span class="w"> </span><span class="k">READ</span><span class="w"> </span><span class="k">ON</span><span class="w"> </span><span class="n">SECRET</span><span class="w"> </span><span class="n">my_db</span><span class="p">.</span><span class="n">my_schema</span><span class="p">.</span><span class="n">oauth_creds</span><span class="w"> </span><span class="k">TO</span><span class="w"> </span><span class="k">ROLE</span><span class="w"> </span><span class="n">my_service_role</span><span class="p">;</span>
+</code></pre></div>
+
+<h3 id="step-2-inject-secrets-as-environment-variables">Step 2: Inject secrets as environment variables</h3>
+<p>Use <code>envVarName</code> and <code>secretKeyRef</code> to expose individual fields as env vars inside the container. The <code>secretKeyRef</code> value depends on the secret type:</p>
+<ul>
+<li><code>password</code> type: <code>username</code> or <code>password</code></li>
+<li><code>generic_string</code> type: <code>secret_string</code></li>
+</ul>
+<div class="highlight"><pre><span></span><code><span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">containers</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">main</span>
+<span class="w">    </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/my_db/my_schema/my_repo/my_custom_image:v1</span>
+<span class="w">    </span><span class="nt">env</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">APP_PORT</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;8080&quot;</span>
+<span class="w">    </span><span class="nt">secrets</span><span class="p">:</span>
+<span class="w">    </span><span class="c1"># External database credentials</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">snowflakeSecret</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">objectName</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my_db.my_schema.external_db_creds</span>
+<span class="w">      </span><span class="nt">secretKeyRef</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">username</span>
+<span class="w">      </span><span class="nt">envVarName</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">DB_USERNAME</span><span class="w">              </span><span class="c1"># container reads $DB_USERNAME</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">snowflakeSecret</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">objectName</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my_db.my_schema.external_db_creds</span>
+<span class="w">      </span><span class="nt">secretKeyRef</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">password</span>
+<span class="w">      </span><span class="nt">envVarName</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">DB_PASSWORD</span><span class="w">              </span><span class="c1"># container reads $DB_PASSWORD</span>
+
+<span class="w">    </span><span class="c1"># API key (generic string)</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">snowflakeSecret</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">objectName</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my_db.my_schema.api_key</span>
+<span class="w">      </span><span class="nt">secretKeyRef</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">secret_string</span>
+<span class="w">      </span><span class="nt">envVarName</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">API_KEY</span><span class="w">                  </span><span class="c1"># container reads $API_KEY</span>
+
+<span class="w">    </span><span class="nt">readinessProbe</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8080</span>
+<span class="w">      </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/healthcheck</span>
+<span class="w">  </span><span class="nt">endpoints</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">app</span>
+<span class="w">    </span><span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8080</span>
+<span class="w">    </span><span class="nt">public</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+</code></pre></div>
+
+<p>Your application code reads these like any other env var:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+
+<span class="n">db_user</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s1">&#39;DB_USERNAME&#39;</span><span class="p">]</span>
+<span class="n">db_pass</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s1">&#39;DB_PASSWORD&#39;</span><span class="p">]</span>
+<span class="n">api_key</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s1">&#39;API_KEY&#39;</span><span class="p">]</span>
+</code></pre></div>
+
+<h3 id="step-3-alternative-mount-secrets-as-files">Step 3 (alternative): Mount secrets as files</h3>
+<p>Use <code>directoryPath</code> instead of <code>envVarName</code> to mount all secret fields as files in a directory. This is useful for secrets that are too large for env vars or for applications that expect credential files.</p>
+<div class="highlight"><pre><span></span><code><span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">containers</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">main</span>
+<span class="w">    </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/my_db/my_schema/my_repo/my_custom_image:v1</span>
+<span class="w">    </span><span class="nt">secrets</span><span class="p">:</span>
+<span class="w">    </span><span class="c1"># Mounts files at /etc/secrets/db_creds/username and /etc/secrets/db_creds/password</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">snowflakeSecret</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">objectName</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my_db.my_schema.external_db_creds</span>
+<span class="w">      </span><span class="nt">directoryPath</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/etc/secrets/db_creds</span>
+
+<span class="w">    </span><span class="c1"># Mounts file at /etc/secrets/api/secret_string</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">snowflakeSecret</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">objectName</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my_db.my_schema.api_key</span>
+<span class="w">      </span><span class="nt">directoryPath</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/etc/secrets/api</span>
+
+<span class="w">    </span><span class="nt">readinessProbe</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8080</span>
+<span class="w">      </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/healthcheck</span>
+<span class="w">  </span><span class="nt">endpoints</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">app</span>
+<span class="w">    </span><span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8080</span>
+<span class="w">    </span><span class="nt">public</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+</code></pre></div>
+
+<p>Your application reads the files:</p>
+<div class="highlight"><pre><span></span><code><span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="s1">&#39;/etc/secrets/db_creds/username&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+    <span class="n">db_user</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">read</span><span class="p">()</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+
+<span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="s1">&#39;/etc/secrets/db_creds/password&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+    <span class="n">db_pass</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">read</span><span class="p">()</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+
+<span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="s1">&#39;/etc/secrets/api/secret_string&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+    <span class="n">api_key</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">read</span><span class="p">()</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+</code></pre></div>
+
+<h3 id="using-object-references-for-native-apps">Using object references (for Native Apps)</h3>
+<p>If your service runs inside a Native App, use <code>objectReference</code> instead of <code>objectName</code>. The reference maps to a consumer-provided secret defined in the app's <code>manifest.yml</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">containers</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">main</span>
+<span class="w">    </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/my_db/my_schema/my_repo/my_custom_image:v1</span>
+<span class="w">    </span><span class="nt">secrets</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">snowflakeSecret</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">objectReference</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">consumer_api_secret</span><span class="w">    </span><span class="c1"># reference name from manifest.yml</span>
+<span class="w">      </span><span class="nt">secretKeyRef</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">secret_string</span>
+<span class="w">      </span><span class="nt">envVarName</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">API_KEY</span>
+<span class="w">    </span><span class="nt">readinessProbe</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8080</span>
+<span class="w">      </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/healthcheck</span>
+<span class="w">  </span><span class="nt">endpoints</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">app</span>
+<span class="w">    </span><span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8080</span>
+<span class="w">    </span><span class="nt">public</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+</code></pre></div>
+
+<h3 id="snowflake-provided-session-token">Snowflake-provided session token</h3>
+<p>Every SPCS container automatically receives a Snowflake OAuth token for executing SQL — no secret object needed:</p>
+<table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Location</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>OAuth token</td>
+<td><code>/snowflake/session/token</code> (auto-refreshed every few minutes, valid up to 1 hour)</td>
+</tr>
+<tr>
+<td>Account locator</td>
+<td><code>$SNOWFLAKE_ACCOUNT</code> env var</td>
+</tr>
+<tr>
+<td>Hostname</td>
+<td><code>$SNOWFLAKE_HOST</code> env var</td>
+</tr>
+</tbody>
+</table>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">snowflake.connector</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">get_login_token</span><span class="p">():</span>
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="s1">&#39;/snowflake/session/token&#39;</span><span class="p">,</span> <span class="s1">&#39;r&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">f</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
+
+<span class="n">conn</span> <span class="o">=</span> <span class="n">snowflake</span><span class="o">.</span><span class="n">connector</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span>
+    <span class="n">host</span><span class="o">=</span><span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s1">&#39;SNOWFLAKE_HOST&#39;</span><span class="p">],</span>
+    <span class="n">account</span><span class="o">=</span><span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s1">&#39;SNOWFLAKE_ACCOUNT&#39;</span><span class="p">],</span>
+    <span class="n">token</span><span class="o">=</span><span class="n">get_login_token</span><span class="p">(),</span>
+    <span class="n">authenticator</span><span class="o">=</span><span class="s1">&#39;oauth&#39;</span>
+<span class="p">)</span>
+</code></pre></div>
+
+<p>You can customize the token path and permissions with <code>sessionTokenConfig</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">containers</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">main</span>
+<span class="w">    </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/my_db/my_schema/my_repo/my_custom_image:v1</span>
+<span class="w">    </span><span class="nt">sessionTokenConfig</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/opt/app/credentials</span><span class="w">          </span><span class="c1"># token at /opt/app/credentials/token</span>
+<span class="w">      </span><span class="nt">permission</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;0600&quot;</span><span class="w">                   </span><span class="c1"># restrict to container user only</span>
+<span class="w">      </span><span class="nt">mountConnectionConfig</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w">          </span><span class="c1"># also generate connections.toml</span>
+<span class="w">    </span><span class="nt">readinessProbe</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8080</span>
+<span class="w">      </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/healthcheck</span>
+<span class="w">  </span><span class="nt">endpoints</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">app</span>
+<span class="w">    </span><span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8080</span>
+<span class="w">    </span><span class="nt">public</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+</code></pre></div>
+
+<h3 id="secrets-management-best-practices">Secrets management best practices</h3>
+<ul>
+<li><strong>Never hardcode credentials</strong> in Dockerfiles, env vars in the spec, or application code. Always use <code>SECRET</code> objects.</li>
+<li><strong>Use <code>generic_string</code></strong> for single-value secrets (API keys, tokens). Use <code>password</code>** for username/password pairs.</li>
+<li><strong>Prefer env vars</strong> (<code>envVarName</code>) for simple key-value secrets. Use <strong>file mounts</strong> (<code>directoryPath</code>) for certificates, multi-line keys, or applications that read config files.</li>
+<li><strong>Rotate secrets</strong> by updating the <code>SECRET</code> object in Snowflake — the container picks up the new value on the next restart (use <code>ALTER SERVICE ... SUSPEND</code> then <code>ALTER SERVICE ... RESUME</code>, or redeploy).</li>
+<li><strong>Scope access</strong> — grant <code>READ</code> on secrets only to the service's owner role. Don't grant to broader roles.</li>
+<li><strong>Audit secret access</strong> with <code>ACCESS_HISTORY</code> views to track which services consumed which secrets.</li>
+</ul>
+<hr />
+<h2 id="key-constraints">Key Constraints</h2>
+<ul>
+<li>Always build for <code>linux/amd64</code></li>
+<li>Replace underscores with dashes in the registry hostname</li>
+<li>Use the fully qualified image path (<code>/db/schema/repo/image:tag</code>) in the service specification</li>
+<li>Max compressed layer size: 160 GiB (AWS) / 195 GiB (Azure)</li>
+<li>Dropping individual images from a repository is not supported — you can only drop the entire repository</li>
+</ul>
+</body>
+</html>
