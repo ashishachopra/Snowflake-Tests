@@ -15,5 +15,6 @@
 | [SF Streamlit MCP](https://github.com/ashishachopra/streamlit_mcp_cortex) |
 | [SF Online FS](https://github.com/ashishachopra/SF-OnlineFS) |
 | [SF Benchmarking](https://github.com/ashishachopra/SF_RT_InteractiveSFMgIceB) |
+| [SF Coco Automations](https://github.com/ashishachopra/sf-coco-automations) |
 
 </div>
