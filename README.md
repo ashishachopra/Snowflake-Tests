@@ -17,5 +17,6 @@
 | [SF Benchmarking](https://github.com/ashishachopra/SF_RT_InteractiveSFMgIceB) |
 | [SF Coco Automations](https://github.com/ashishachopra/sf-coco-automations) |
 | [Coco Plus](https://github.com/ashishachopra/cocoplus) |
+| [JEV-LLM-Eval](https://github.com/ashishachopra/SF-JEV-LLM-Eval) |
 
 </div>
